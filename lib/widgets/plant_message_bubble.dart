@@ -20,7 +20,8 @@ class PlantMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final align =
         fromPlant ? CrossAxisAlignment.start : CrossAxisAlignment.end;
-    final bg = fromPlant ? AppColors.secondary : AppColors.primary;
+    // White plant bubbles stay readable on the mint scaffold background.
+    final bg = fromPlant ? Colors.white : AppColors.primary;
     final fg = fromPlant ? AppColors.text : Colors.white;
 
     return Column(
@@ -53,6 +54,9 @@ class PlantMessageBubble extends StatelessWidget {
               bottomLeft: Radius.circular(fromPlant ? 4 : 18),
               bottomRight: Radius.circular(fromPlant ? 18 : 4),
             ),
+            border: fromPlant
+                ? Border.all(color: AppColors.primary.withValues(alpha: 0.2))
+                : null,
           ),
           child: Text(
             text,

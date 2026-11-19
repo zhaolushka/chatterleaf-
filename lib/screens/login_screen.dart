@@ -130,7 +130,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                   : const Text('Sign in'),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
+                            // One-tap entry for live defense demos.
+                            TextButton(
+                              onPressed: _busy
+                                  ? null
+                                  : () async {
+                                      _email.text = 'demo@chatterleaf.app';
+                                      _password.text = 'password123';
+                                      await _submit();
+                                    },
+                              child: const Text('Try demo account'),
+                            ),
+                            const SizedBox(height: 4),
                             Text(
                               'Demo: demo@chatterleaf.app / password123\n'
                               'Second: grower2@chatterleaf.app / password123',

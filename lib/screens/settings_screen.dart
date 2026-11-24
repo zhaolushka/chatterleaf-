@@ -1,278 +1,169 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
-import '../data/auth_service.dart';
-import '../data/connectivity_service.dart';
-import '../data/greenhouse_repository.dart';
-import '../models/greenhouse.dart';
-import '../models/greenhouse_settings.dart';
-import '../theme/app_colors.dart';
+import '../data/data.dart';
+import '../logic/crop_profiles.dart';
+import '../logic/mood.dart';
+import '../theme/app_theme.dart';
+import '../widgets/common.dart';
+import '../widgets/plant_avatar.dart';
+import 'bed_settings_screen.dart';
 
+/// Screen 8. Settings tab: account, beds (thresholds), demo tools, sign out.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, required this.user});
+  final AppUser user;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  GreenhouseSettings? _draft;
-  String? _error;
-  bool _busy = false;
+  late final Stream<List<Greenhouse>> _stream = greenhouseRepository.watchMyGreenhouses(widget.user.uid);
 
-  final _tempMin = TextEditingController();
-  final _tempMax = TextEditingController();
-  final _humMin = TextEditingController();
-  final _humMax = TextEditingController();
-  final _soilMin = TextEditingController();
-  final _soilMax = TextEditingController();
-  final _lightMin = TextEditingController();
-  final _irrigation = TextEditingController();
-
-  @override
-  void dispose() {
-    _tempMin.dispose();
-    _tempMax.dispose();
-    _humMin.dispose();
-    _humMax.dispose();
-    _soilMin.dispose();
-    _soilMax.dispose();
-    _lightMin.dispose();
-    _irrigation.dispose();
-    super.dispose();
-  }
-
-  void _hydrate(GreenhouseSettings s) {
-    if (_draft != null) return;
-    _draft = s;
-    _tempMin.text = s.tempMin.toStringAsFixed(0);
-    _tempMax.text = s.tempMax.toStringAsFixed(0);
-    _humMin.text = s.humMin.toStringAsFixed(0);
-    _humMax.text = s.humMax.toStringAsFixed(0);
-    _soilMin.text = s.soilMin.toStringAsFixed(0);
-    _soilMax.text = s.soilMax.toStringAsFixed(0);
-    _lightMin.text = s.lightMin.toStringAsFixed(0);
-    _irrigation.text = s.irrigationTime;
-  }
-
-  GreenhouseSettings _fromFields(GreenhouseSettings base) {
-    double parse(TextEditingController c, double fallback) =>
-        double.tryParse(c.text.trim()) ?? fallback;
-    return base.copyWith(
-      tempMin: parse(_tempMin, base.tempMin),
-      tempMax: parse(_tempMax, base.tempMax),
-      humMin: parse(_humMin, base.humMin),
-      humMax: parse(_humMax, base.humMax),
-      soilMin: parse(_soilMin, base.soilMin),
-      soilMax: parse(_soilMax, base.soilMax),
-      lightMin: parse(_lightMin, base.lightMin),
-      irrigationTime: _irrigation.text.trim().isEmpty
-          ? base.irrigationTime
-          : _irrigation.text.trim(),
+  Future<void> _signOut() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Sign out?', style: nunito(20, FontWeight.w900)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Sign out')),
+        ],
+      ),
     );
+    if (ok == true) await authRepository.signOut();
   }
 
-  Future<void> _save(GreenhouseRepository repo) async {
-    final base = _draft ?? GreenhouseSettings.defaults();
-    final next = _fromFields(base).copyWith(unit: base.unit);
-    final err = GreenhouseSettings.validate(next);
-    if (err != null) {
-      setState(() => _error = err);
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await repo.saveSettings(next);
-      _draft = next;
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings saved')),
-        );
-      }
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
+  void _toast(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   @override
   Widget build(BuildContext context) {
-    final repo = context.watch<GreenhouseRepository>();
-    final connectivity = context.watch<ConnectivityService>();
-
-    return StreamBuilder<GreenhouseSettings?>(
-      stream: repo.watchSettings(),
-      builder: (context, sSnap) {
-        final settings = sSnap.data;
-        if (settings != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _hydrate(settings);
-          });
-        }
-        return StreamBuilder<Greenhouse?>(
-          stream: repo.watchGreenhouse(),
-          builder: (context, ghSnap) {
-            final gh = ghSnap.data;
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Text(
-                  'Thresholds',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
+    return StreamBuilder<List<Greenhouse>>(
+      stream: _stream,
+      builder: (context, snap) {
+        final beds = snap.data ?? const <Greenhouse>[];
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 120),
+          children: [
+            Text('Settings', style: nunito(34, FontWeight.w900, spacing: -0.8)),
+            const SizedBox(height: 14),
+            SoftCard(
+              child: Row(children: [
+                const CircleAvatar(radius: 24, backgroundColor: AppColors.lime, child: Icon(Icons.person_rounded, color: AppColors.ink)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(widget.user.displayName, style: nunito(16, FontWeight.w900)),
+                    Text(widget.user.email, style: nunito(13, FontWeight.w700, color: AppColors.muted)),
+                  ]),
                 ),
-                const SizedBox(height: 8),
-                _pair('Temp min / max (°C)', _tempMin, _tempMax),
-                _pair('Humidity min / max (%)', _humMin, _humMax),
-                _pair('Soil min / max (%)', _soilMin, _soilMax),
-                TextField(
-                  controller: _lightMin,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Light min (lux)'),
+                StatusChip(label: kUseFirebase ? 'Firebase' : 'Demo mode', background: AppColors.field),
+              ]),
+            ),
+            const SizedBox(height: 18),
+            Text('Beds & thresholds', style: nunito(17, FontWeight.w900)),
+            const SizedBox(height: 10),
+            for (final g in beds) ...[
+              Material(
+                color: AppColors.pastel(g.cropKey),
+                borderRadius: BorderRadius.circular(26),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(26),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => BedSettingsScreen(greenhouseId: g.id))),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 16, 10),
+                    child: Row(children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        alignment: Alignment.center,
+                        child: PlantAvatar(cropKey: g.cropKey, mood: Mood.happy, size: 44, shadow: false),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('${g.plantName} · ${g.name}', style: nunito(16, FontWeight.w900)),
+                          Text('${profileFor(g.cropKey).title} · ${g.settings.tempMin.round()}–${g.settings.tempMax.round()} °C · soil ≥ ${g.settings.soilMin.round()} %',
+                              style: nunito(12, FontWeight.w700, color: AppColors.muted)),
+                        ]),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+                    ]),
+                  ),
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _irrigation,
-                  decoration:
-                      const InputDecoration(labelText: 'Irrigation time (HH:mm)'),
-                ),
-                const SizedBox(height: 12),
-                SwitchListTile(
-                  title: const Text('Use Fahrenheit'),
-                  value: (_draft ?? settings)?.unit == 'f',
-                  onChanged: (v) {
-                    setState(() {
-                      final base = _draft ?? settings ?? GreenhouseSettings.defaults();
-                      _draft = base.copyWith(unit: v ? 'f' : 'c');
-                    });
-                  },
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Plant persona',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: Persona.values.map((p) {
-                    final selected = gh?.persona == p;
-                    return ChoiceChip(
-                      label: Text(p.displayName),
-                      selected: selected,
-                      onSelected: repo.isOffline
-                          ? null
-                          : (_) => repo.setPersona(p),
-                    );
-                  }).toList(),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: AppColors.alert,
-                      fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(height: 10),
+            ],
+            if (demoBackend != null) ...[
+              const SizedBox(height: 8),
+              Text('Demo tools', style: nunito(17, FontWeight.w900)),
+              Text('For the defense: trigger the stress-test scenarios without Firebase.',
+                  style: nunito(13, FontWeight.w700, color: AppColors.muted)),
+              const SizedBox(height: 10),
+              SoftCard(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(children: [
+                  if (beds.isNotEmpty)
+                    _DemoTile(
+                      icon: Icons.thermostat_rounded,
+                      title: 'Heat wave: ${beds.first.plantName} → 45 °C',
+                      onTap: () {
+                        demoBackend!.demoHeatWave(beds.first.id);
+                        _toast('${beds.first.plantName} is now at 45 °C');
+                      },
+                    ),
+                  if (beds.length > 1)
+                    _DemoTile(
+                      icon: Icons.water_drop_outlined,
+                      title: 'Dry soil: ${beds[1].plantName} → 18 %',
+                      onTap: () {
+                        demoBackend!.demoDrySoil(beds[1].id);
+                        _toast('${beds[1].plantName}’s soil is now at 18 %');
+                      },
+                    ),
+                  ListenableBuilder(
+                    listenable: connectivity,
+                    builder: (context, _) => ListTile(
+                      leading: const Icon(Icons.wifi_off_rounded, color: AppColors.ink),
+                      title: Text('Simulate no internet', style: nunito(15, FontWeight.w800)),
+                      trailing: PillSwitch(
+                        label: 'Simulate no internet',
+                        value: connectivity.simulatedOffline,
+                        onChanged: connectivity.setSimulatedOffline,
+                      ),
                     ),
                   ),
-                ],
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _busy || repo.isOffline ? null : () => _save(repo),
-                  child: Text(_busy ? 'Saving…' : 'Save settings'),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'Demo tools',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: repo.isOffline
-                      ? null
-                      : () async {
-                          await repo.createDemoData();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Created 7 days of history (incl. 45°C & 18% soil).',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                  icon: const Icon(Icons.dataset_outlined),
-                  label: const Text('Create demo data'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: repo.isOffline ? null : () => repo.simulateHotSpike(),
-                  icon: const Icon(Icons.whatshot),
-                  label: const Text('Simulate 45°C spike'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: repo.isOffline ? null : () => repo.simulateDrySoil(),
-                  icon: const Icon(Icons.water_drop),
-                  label: const Text('Simulate 18% soil'),
-                ),
-                SwitchListTile(
-                  title: const Text('Mock offline (No connection)'),
-                  subtitle: const Text('Toggle M8 without airplane mode'),
-                  value: !connectivity.isOnline,
-                  onChanged: (v) => connectivity.setOnline(!v),
-                ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: () => context.read<AuthService>().signOut(),
-                  icon: const Icon(Icons.logout, color: AppColors.alert),
-                  label: const Text(
-                    'Log out',
-                    style: TextStyle(color: AppColors.alert),
+                  _DemoTile(
+                    icon: Icons.refresh_rounded,
+                    title: 'Reset demo data',
+                    onTap: () {
+                      demoBackend!.reset();
+                      _toast('Demo data restored');
+                    },
                   ),
-                ),
-              ],
-            );
-          },
+                ]),
+              ),
+            ],
+            const SizedBox(height: 22),
+            PillButton(label: 'Sign out', icon: Icons.logout_rounded, onTap: _signOut),
+          ],
         );
       },
     );
   }
+}
 
-  Widget _pair(String label, TextEditingController a, TextEditingController b) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: a,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: '$label (min)'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: b,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'max'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+class _DemoTile extends StatelessWidget {
+  const _DemoTile({required this.icon, required this.title, required this.onTap});
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => ListTile(
+        leading: Icon(icon, color: AppColors.ink),
+        title: Text(title, style: nunito(15, FontWeight.w800)),
+        trailing: const Icon(Icons.play_circle_fill_rounded, color: AppColors.limeDark, size: 30),
+        onTap: onTap,
+      );
 }

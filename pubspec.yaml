@@ -1,7 +1,7 @@
-name: chatterleaf
-description: Smart greenhouse app — plants text you what they need.
+name: tamyr
+description: "Tamyr — a school greenhouse app with talking plants."
 publish_to: "none"
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.14.0
@@ -9,13 +9,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  material_ui: ^1.1.0
+  material_ui: ^1.11.1
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
-  fl_chart: ^0.69.0
-  provider: ^6.1.2
   intl: ^0.20.2
-  uuid: ^4.5.1
+  # Firebase is used only when the app is started with --dart-define=USE_FIREBASE=true.
+  # By default the app runs in demo mode with an in-memory database (no keys needed).
+  firebase_core: ">=3.6.0 <6.0.0"
+  firebase_auth: ">=5.3.0 <8.0.0"
+  cloud_firestore: ">=5.4.0 <8.0.0"
 
 dev_dependencies:
   flutter_test:

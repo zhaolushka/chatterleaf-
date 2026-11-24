@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat;
 import 'package:material_ui/material_ui.dart';
 
 import '../data/data.dart';

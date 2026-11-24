@@ -1,4 +1,4 @@
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
 /// Temperature in the chosen units. The database always stores °C.
 String formatTemp(double celsius, String units) {

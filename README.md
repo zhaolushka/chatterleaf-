@@ -105,3 +105,10 @@ firestore.rules             owner-only access
 |---|---|
 | Zhaolu | design, Flutter, Firebase, presentation |
 | _add teammates_ | |
+
+## Website (GitHub Pages)
+
+Every push to `main` or `tamyr` builds the web version (demo mode) and publishes it:
+**https://zhaolushka.github.io/chatterleaf-/**
+
+One-time setup: repository **Settings → Pages → Source: GitHub Actions**. The first build takes ~3–5 minutes (tab *Actions*).

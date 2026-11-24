@@ -1,72 +1,50 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
-import 'data/auth_service.dart';
-import 'data/connectivity_service.dart';
-import 'data/greenhouse_repository.dart';
+import 'data/data.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/common.dart';
 
-/// Chatterleaf — mock Firebase by default (no keys needed for live demo).
-void main() {
+/// Tamyr — school greenhouse with talking plants.
+///
+/// Demo mode (default): in-memory database + simulator, no keys needed.
+/// Firebase mode: `flutter run --dart-define=USE_FIREBASE=true`
+/// (needs `flutterfire configure` first — see README).
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ChatterleafApp());
+  if (kUseFirebase) await Firebase.initializeApp();
+  initServices();
+  runApp(const TamyrApp());
 }
 
-class ChatterleafApp extends StatefulWidget {
-  const ChatterleafApp({super.key, this.useMock = true});
-
-  final bool useMock;
+class TamyrApp extends StatelessWidget {
+  const TamyrApp({super.key});
 
   @override
-  State<ChatterleafApp> createState() => _ChatterleafAppState();
-}
-
-class _ChatterleafAppState extends State<ChatterleafApp> {
-  late final AuthService _auth;
-  late final ConnectivityService _connectivity;
-  late final GreenhouseRepository _repository;
-
-  @override
-  void initState() {
-    super.initState();
-    _auth = AuthService(useMock: widget.useMock);
-    _connectivity = ConnectivityService(online: true);
-    _repository = GreenhouseRepository(
-      auth: _auth,
-      connectivity: _connectivity,
-      useMock: widget.useMock,
-    );
-  }
-
-  @override
-  void dispose() {
-    _repository.dispose();
-    _auth.dispose();
-    _connectivity.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider<AuthService>.value(value: _auth),
-        ChangeNotifierProvider<ConnectivityService>.value(value: _connectivity),
-        ChangeNotifierProvider<GreenhouseRepository>.value(value: _repository),
-      ],
-      child: MaterialApp(
-        title: 'Chatterleaf',
+  Widget build(BuildContext context) => MaterialApp(
+        title: 'Tamyr',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
-        home: Consumer<AuthService>(
-          builder: (context, auth, _) {
-            if (auth.currentUser == null) return const LoginScreen();
-            return const HomeShell();
-          },
-        ),
-      ),
-    );
-  }
+        home: const AuthGate(),
+      );
+}
+
+/// Shows the login screen or the app. When the user signs in or out,
+/// authStateChanges sends a new value and the screen switches by itself.
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<AppUser?>(
+        stream: authRepository.authStateChanges(),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) return const Scaffold(body: Loading());
+          final user = snap.data;
+          if (user == null) return const LoginScreen();
+          // key: a new account gets a fresh shell and never sees the previous user's data (M1).
+          return HomeShell(key: ValueKey(user.uid), user: user);
+        },
+      );
 }

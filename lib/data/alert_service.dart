@@ -1,59 +1,47 @@
-import '../models/greenhouse_settings.dart';
-import '../models/persona.dart';
-import '../models/readings.dart';
-import 'persona_engine.dart';
+import 'dart:async';
 
-class PendingAlert {
-  const PendingAlert({
-    required this.parameter,
-    required this.value,
-    required this.message,
-  });
+import '../logic/plant_talk.dart';
+import '../logic/status.dart';
+import 'data.dart';
 
-  final String parameter;
-  final double value;
-  final String message;
-}
-
-/// M5: builds plant-voice alerts when readings leave their range.
+/// M5: alerts. When a value leaves its allowed range, the plant writes an alert
+/// in its own voice. The same problem is not repeated more often than every 30 minutes.
+/// The app shell shows new alerts as an in-app banner (see HomeShell).
 class AlertService {
-  AlertService({PersonaEngine? engine}) : _engine = engine ?? const PersonaEngine();
+  AlertService(this.uid);
+  final String uid;
 
-  final PersonaEngine _engine;
+  static const repeatAfter = Duration(minutes: 30);
 
-  List<PendingAlert> check({
-    required Readings readings,
-    required GreenhouseSettings settings,
-    required Persona persona,
-  }) {
-    final out = <PendingAlert>[];
+  StreamSubscription<List<Greenhouse>>? _sub;
+  final Map<String, DateTime> _lastSent = {}; // "bedId/param" → time
 
-    void add(String parameter, double value, double min, double max,
-        {bool lightOnly = false}) {
-      final low = lightOnly ? value < min : value < min;
-      final high = lightOnly ? false : value > max;
-      if (!low && !high) return;
-      out.add(
-        PendingAlert(
-          parameter: parameter,
+  void start() {
+    _sub = greenhouseRepository.watchMyGreenhouses(uid).listen(_check);
+  }
+
+  void dispose() => _sub?.cancel();
+
+  void _check(List<Greenhouse> beds) {
+    if (!connectivity.online) return;
+    final now = DateTime.now();
+    for (final b in beds) {
+      if (isStale(b.current)) continue;
+      for (final p in findProblems(b.current, b.settings)) {
+        if (p.param == 'light' || p.param == 'airHumidity') continue; // only the important ones
+        final key = '${b.id}/${p.param}';
+        final last = _lastSent[key];
+        if (last != null && now.difference(last) < repeatAfter) continue;
+        _lastSent[key] = now;
+        final value = p.param == 'airTemp' ? b.current.airTemp : b.current.soilMoisture;
+        greenhouseRepository.addAlert(
+          uid: uid,
+          greenhouse: b,
+          param: p.param,
           value: value,
-          message: _engine.readingMessage(
-            persona: persona,
-            parameter: parameter,
-            value: value,
-            outOfRange: true,
-            high: high,
-          ),
-        ),
-      );
+          message: PlantTalk(greenhouse: b).alertLine(p),
+        );
+      }
     }
-
-    add('airTemp', readings.airTemp, settings.tempMin, settings.tempMax);
-    add('airHumidity', readings.airHumidity, settings.humMin, settings.humMax);
-    add('soilMoisture', readings.soilMoisture, settings.soilMin, settings.soilMax);
-    add('light', readings.light, settings.lightMin, double.infinity,
-        lightOnly: true);
-
-    return out;
   }
 }
